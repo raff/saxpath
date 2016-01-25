@@ -34,7 +34,7 @@ func dlog(args ...interface{}) {
 ////////////////////////////////////////
 
 //SAX-like handler
-type Handler interface {
+type SAXHandler interface {
 	//called when XML document start
 	StartDocument() bool
 	//called when XML document end
@@ -58,21 +58,21 @@ type Handler interface {
 ////////////////////////////////////////
 
 //SAX-like XML Parser
-type Parser struct {
+type SAXParser struct {
 	*xml.Decoder
-	handler Handler
+	handler SAXHandler
 	started bool
 	ended   bool
 }
 
-//Create a New Parser
-func NewParser(reader io.Reader, handler Handler) *Parser {
+//Create a New SAXParser
+func NewSAXParser(reader io.Reader, handler SAXHandler) *SAXParser {
 	decoder := xml.NewDecoder(reader)
-	return &Parser{Decoder: decoder, handler: handler}
+	return &SAXParser{Decoder: decoder, handler: handler}
 }
 
 //SetHTMLMode make Parser can parse invalid HTML
-func (p *Parser) SetHTMLMode() {
+func (p *SAXParser) SetHTMLMode() {
 	p.Strict = false
 	p.AutoClose = xml.HTMLAutoClose
 	p.Entity = xml.HTMLEntity
@@ -83,9 +83,9 @@ func (p *Parser) SetHTMLMode() {
 //
 //The parsing process stops if the handler methods return "true" and can be restarted
 //by calling Parse again until it returns ParseComplete or ReadComplete
-func (p *Parser) Parse() error {
+func (p *SAXParser) Parse() (xml.Token, error) {
 	if p.ended {
-		return ParseComplete
+		return nil, ParseComplete
 	}
 
 	if !p.started {
@@ -95,13 +95,13 @@ func (p *Parser) Parse() error {
 
 	stop := false
 
-	for !stop {
+	for {
 		token, err := p.Token()
 		if err == io.EOF {
-			return ReadComplete
+			return nil, ReadComplete
 		}
 		if err != nil {
-			return err
+			return nil, err
 		}
 
 		switch t := token.(type) {
@@ -120,15 +120,16 @@ func (p *Parser) Parse() error {
 		default:
 			panic("unknown xml token")
 		}
-	}
 
-	if stop {
-		return ParseStopped
+		if stop {
+			return token, ParseStopped
+		}
+
 	}
 
 	p.ended = true
 	p.handler.EndDocument()
-	return ParseComplete
+	return nil, ParseComplete
 }
 
 ////////////////////////////////////////
@@ -333,12 +334,21 @@ type SAXFinder struct {
 	lastMatch Matches
 }
 
-func NewSAXFinder(pattern string) *SAXFinder {
+func NewSAXFinder() *SAXFinder {
 	return &SAXFinder{
-		pattern:   NewXPattern(pattern),
 		level:     -1,
 		lastMatch: MATCH_NO,
 	}
+}
+
+func (h *SAXFinder) SetPattern(pattern string) {
+	h.pattern = NewXPattern(pattern)
+	h.matching = nil
+	h.current = ""
+	h.text = nil
+	h.attrs = nil
+	h.level = -1
+	h.lastMatch = MATCH_NO
 }
 
 func (h *SAXFinder) StartDocument() (stop bool) {
@@ -485,13 +495,14 @@ func main() {
 
 	_ = "breakpoint"
 
-	handler := NewSAXFinder(xpattern)
-	parser := NewParser(f, handler)
+	handler := NewSAXFinder()
+	handler.SetPattern(xpattern)
+	parser := NewSAXParser(f, handler)
 	//parser.SetHTMLMode()
 
 	for i := 0; i < 3; i++ {
-		err = parser.Parse()
-		log.Println(err)
+		t, err := parser.Parse()
+		log.Printf("Token: %#v, Error: %v", t, err)
 
 		if err != ParseStopped {
 			break
