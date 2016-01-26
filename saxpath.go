@@ -1,9 +1,8 @@
 package main
 
 import (
-	//"encoding/xml"
+	"encoding/xml"
 	"errors"
-	"github.com/raff/saxpath/xml"
 	"io"
 	"log"
 	"os"
