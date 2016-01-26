@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/xml"
 	"errors"
+	"flag"
 	"io"
 	"log"
 	"os"
@@ -506,12 +507,15 @@ func (p *SAXParser) FindElement(pattern string, res interface{}) error {
 ////////////////////////////////////////
 
 func main() {
-	if len(os.Args) != 3 {
-		log.Fatal("usage: saxpath {input.xml} {xpath}")
+	flag.BoolVar(&Debug, "debug", false, "print debug messages")
+	flag.Parse()
+
+	if flag.NArg() != 2 {
+		log.Fatal("usage: saxpath [--debug] {input.xml} {xpath}")
 	}
 
-	filename := os.Args[1]
-	xpattern := os.Args[2]
+	filename := flag.Args()[0]
+	xpattern := flag.Args()[1]
 
 	f, err := os.Open(filename)
 	if err != nil {
@@ -520,8 +524,6 @@ func main() {
 
 	defer f.Close()
 
-	Debug = true
-
 	//var res struct {
 	//    Value string `xml:",chardata"`
 	//}
@@ -529,6 +531,11 @@ func main() {
 	var res string
 
 	finder := NewFinder(f)
-	err = finder.FindElement(xpattern, &res)
-	log.Println(err, res)
+
+	for err == nil {
+		err = finder.FindElement(xpattern, &res)
+		log.Println(res)
+	}
+
+	log.Println(err)
 }
