@@ -1,8 +1,9 @@
 package main
 
 import (
-	"encoding/xml"
+	//"encoding/xml"
 	"errors"
+	"github.com/raff/saxpath/xml"
 	"io"
 	"log"
 	"os"
@@ -16,6 +17,7 @@ var (
 	ParseComplete = errors.New("parsing complete")
 	ParseStopped  = errors.New("parsing stopped")
 	ReadComplete  = io.EOF
+	InvalidToken  = errors.New("invalid token")
 
 	AnyName = xml.Name{Local: "*"}
 	AnyAttr = xml.Attr{Name: AnyName, Value: "*"}
@@ -28,6 +30,12 @@ var (
 func dlog(args ...interface{}) {
 	if Debug {
 		log.Println(args...)
+	}
+}
+
+func dlogf(fmt string, args ...interface{}) {
+	if Debug {
+		log.Printf(fmt, args...)
 	}
 }
 
@@ -375,8 +383,6 @@ func (h *SAXFinder) StartElement(element xml.StartElement) (stop bool) {
 	h.level += 1
 	h.current += "/" + element.Name.Local
 
-	_ = "breakpoint"
-
 	if h.pattern.matchRoot(element.Name, element.Attr) {
 		h.matching = append(h.matching, CloneXPattern(h.pattern))
 	}
@@ -476,6 +482,30 @@ func (h *SAXFinder) Directive(dir xml.Directive) (stop bool) {
 
 ////////////////////////////////////////
 
+func NewFinder(r io.Reader) *SAXParser {
+	return NewSAXParser(r, NewSAXFinder())
+}
+
+func (p *SAXParser) FindElement(pattern string, res interface{}) error {
+	p.handler.(*SAXFinder).SetPattern(pattern)
+	t, err := p.Parse()
+
+	dlogf("Token: %#v, State: %v", t, err)
+
+	if err != ParseStopped || res == nil {
+		return err
+	}
+
+	if s, ok := t.(xml.StartElement); ok {
+		dlog("decode", s)
+		return p.DecodeElement(res, &s)
+	}
+
+	return InvalidToken
+}
+
+////////////////////////////////////////
+
 func main() {
 	if len(os.Args) != 3 {
 		log.Fatal("usage: saxpath {input.xml} {xpath}")
@@ -493,19 +523,13 @@ func main() {
 
 	Debug = true
 
-	_ = "breakpoint"
+	//var res struct {
+	//    Value string `xml:",chardata"`
+	//}
 
-	handler := NewSAXFinder()
-	handler.SetPattern(xpattern)
-	parser := NewSAXParser(f, handler)
-	//parser.SetHTMLMode()
+	var res string
 
-	for i := 0; i < 3; i++ {
-		t, err := parser.Parse()
-		log.Printf("Token: %#v, Error: %v", t, err)
-
-		if err != ParseStopped {
-			break
-		}
-	}
+	finder := NewFinder(f)
+	err = finder.FindElement(xpattern, &res)
+	log.Println(err, res)
 }
