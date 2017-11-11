@@ -39,6 +39,14 @@ func dlogf(fmt string, args ...interface{}) {
 	}
 }
 
+func ns(e xml.Name) string {
+	if e.Space != "" {
+		return e.Space + ":" + e.Local
+	} else {
+		return e.Local
+	}
+}
+
 ////////////////////////////////////////
 
 //SAX-like handler
@@ -376,7 +384,7 @@ func (h *SAXFinder) EndDocument() (stop bool) {
 }
 
 func (h *SAXFinder) StartElement(element xml.StartElement) (stop bool) {
-	dlog("start ", element.Name.Space, ":", element.Name.Local)
+	dlog("start", ns(element.Name))
 
 	h.text = nil
 	h.attrs = element.Attr
@@ -414,7 +422,7 @@ func (h *SAXFinder) StartElement(element xml.StartElement) (stop bool) {
 }
 
 func (h *SAXFinder) EndElement(element xml.EndElement) (stop bool) {
-	dlog("end", element.Name.Space, ":", element.Name.Local)
+	dlog("end", ns(element.Name))
 
 	/*
 	 * See if we have any pending element to start
@@ -449,8 +457,10 @@ func (h *SAXFinder) EndElement(element xml.EndElement) (stop bool) {
 	}
 
 	l := strings.LastIndex(h.current, "/")
-	h.current = h.current[:l]
-	h.level--
+	if l >= 0 {
+		h.current = h.current[:l]
+		h.level--
+	}
 
 	h.text = nil
 	h.attrs = nil
@@ -514,8 +524,8 @@ func main() {
 		log.Fatal("usage: saxpath [--debug] {input.xml} {xpath}")
 	}
 
-	filename := flag.Args()[0]
-	xpattern := flag.Args()[1]
+	filename := flag.Arg(0)
+	xpattern := flag.Arg(1)
 
 	f, err := os.Open(filename)
 	if err != nil {
