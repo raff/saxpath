@@ -49,7 +49,7 @@ func ns(e xml.Name) string {
 
 ////////////////////////////////////////
 
-//SAX-like handler
+// SAX-like handler
 type SAXHandler interface {
 	//called when XML document start
 	StartDocument() bool
@@ -73,7 +73,7 @@ type SAXHandler interface {
 
 ////////////////////////////////////////
 
-//SAX-like XML Parser
+// SAX-like XML Parser
 type SAXParser struct {
 	*xml.Decoder
 	handler SAXHandler
@@ -81,24 +81,24 @@ type SAXParser struct {
 	ended   bool
 }
 
-//Create a New SAXParser
+// Create a New SAXParser
 func NewSAXParser(reader io.Reader, handler SAXHandler) *SAXParser {
 	decoder := xml.NewDecoder(reader)
 	return &SAXParser{Decoder: decoder, handler: handler}
 }
 
-//SetHTMLMode make Parser can parse invalid HTML
+// SetHTMLMode make Parser can parse invalid HTML
 func (p *SAXParser) SetHTMLMode() {
 	p.Strict = false
 	p.AutoClose = xml.HTMLAutoClose
 	p.Entity = xml.HTMLEntity
 }
 
-//Parse calls handler's methods
-//when the parser encount a start-element,a end-element, a comment and so on.
+// Parse calls handler's methods
+// when the parser encount a start-element,a end-element, a comment and so on.
 //
-//The parsing process stops if the handler methods return "true" and can be restarted
-//by calling Parse again until it returns ParseComplete or ReadComplete
+// The parsing process stops if the handler methods return "true" and can be restarted
+// by calling Parse again until it returns ParseComplete or ReadComplete
 func (p *SAXParser) Parse() (xml.Token, error) {
 	if p.ended {
 		return nil, ParseComplete
@@ -164,7 +164,7 @@ const (
 
 ////////////////////////////////////////
 
-//XPattern is a structure to store pattern (paths) matches
+// XPattern is a structure to store pattern (paths) matches
 type XPattern struct {
 	parts []string
 	attrs []xml.Attr
@@ -211,7 +211,7 @@ func NewXPattern(pattern string) *XPattern {
 	return x
 }
 
-//CloneXPattern creates a copy if the input pattern
+// CloneXPattern creates a copy if the input pattern
 func CloneXPattern(p *XPattern) *XPattern {
 	x := &XPattern{
 		parts: make([]string, len(p.parts)),
@@ -520,29 +520,45 @@ func main() {
 	flag.BoolVar(&Debug, "debug", false, "print debug messages")
 	flag.Parse()
 
-	if flag.NArg() != 2 {
-		log.Fatal("usage: saxpath [--debug] {input.xml} {xpath}")
+	var filename, xpattern string
+
+	switch flag.NArg() {
+	case 1:
+		filename = "-"
+		xpattern = flag.Arg(0)
+
+	case 2:
+		filename = flag.Arg(0)
+		xpattern = flag.Arg(1)
+
+	default:
+		log.Fatal("usage: saxpath [--debug] [input.xml] {xpath}")
 	}
 
-	filename := flag.Arg(0)
-	xpattern := flag.Arg(1)
+	var r io.Reader
 
-	f, err := os.Open(filename)
-	if err != nil {
-		log.Fatal(err)
+	if filename == "-" {
+		r = os.Stdin
+	} else {
+		f, err := os.Open(filename)
+		if err != nil {
+			log.Fatal(err)
+		}
+		defer f.Close()
+		r = f
 	}
-
-	defer f.Close()
 
 	//var res struct {
 	//    Value string `xml:",chardata"`
 	//}
 
 	var res string
+	var err error
 
-	finder := NewFinder(f)
+	finder := NewFinder(r)
 
 	for err == nil {
+		log.Println("-----------------------------------------")
 		err = finder.FindElement(xpattern, &res)
 		log.Println(res)
 	}
