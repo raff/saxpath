@@ -27,13 +27,13 @@ var (
 	pAttribute = regexp.MustCompile(`^\\[\\s*@(.*)\\s*(=)\\s*["']?(.*?)["']?\\s*\\]`)
 )
 
-func dlog(args ...interface{}) {
+func dlog(args ...any) {
 	if Debug {
 		log.Println(args...)
 	}
 }
 
-func dlogf(fmt string, args ...interface{}) {
+func dlogf(fmt string, args ...any) {
 	if Debug {
 		log.Printf(fmt, args...)
 	}
@@ -367,6 +367,10 @@ func (h *SAXFinder) SetPattern(pattern string) {
 	h.lastMatch = MATCH_NO
 }
 
+func (h *SAXFinder) log() {
+	dlogf("level %v path %v %q", h.level, h.current, h.text)
+}
+
 func (h *SAXFinder) StartDocument() (stop bool) {
 	dlog("doc start")
 
@@ -392,6 +396,7 @@ func (h *SAXFinder) StartElement(element xml.StartElement) (stop bool) {
 	h.current += "/" + element.Name.Local
 
 	if h.pattern.matchRoot(element.Name, element.Attr) {
+		h.log()
 		h.matching = append(h.matching, CloneXPattern(h.pattern))
 	}
 
@@ -415,6 +420,7 @@ func (h *SAXFinder) StartElement(element xml.StartElement) (stop bool) {
 	}
 
 	if match != nil {
+		h.log()
 		return true
 	}
 
@@ -496,7 +502,7 @@ func NewFinder(r io.Reader) *SAXParser {
 	return NewSAXParser(r, NewSAXFinder())
 }
 
-func (p *SAXParser) FindElement(pattern string, res interface{}) error {
+func (p *SAXParser) FindElement(pattern string, res any) error {
 	p.handler.(*SAXFinder).SetPattern(pattern)
 	t, err := p.Parse()
 
@@ -512,6 +518,44 @@ func (p *SAXParser) FindElement(pattern string, res interface{}) error {
 	}
 
 	return InvalidToken
+}
+
+////////////////////////////////////////
+
+type XMLMap map[string]any
+
+func (xm XMLMap) UnmarshalXML(d *xml.Decoder, start xml.StartElement) error {
+	name := start.Name.Local
+	value := XMLMap{}
+
+	for {
+		t, err := d.Token()
+		if err == io.EOF { // found end of element
+			break
+		}
+		if err != nil {
+			return err
+		}
+
+		switch tt := t.(type) {
+		case xml.StartElement:
+			if err = d.DecodeElement(&value, &tt); err != nil {
+				return err
+			}
+
+		case xml.CharData:
+			value["$text"] = string(tt)
+		}
+	}
+
+	xm[name] = value
+	return nil
+}
+
+func (xm XMLMap) UnmarshalXMLAttr(attr xml.Attr) error {
+	name := "@" + attr.Name.Local
+	xm[name] = attr.Value
+	return nil
 }
 
 ////////////////////////////////////////
@@ -552,7 +596,7 @@ func main() {
 	//    Value string `xml:",chardata"`
 	//}
 
-	var res string
+	var res = XMLMap{}
 	var err error
 
 	finder := NewFinder(r)
